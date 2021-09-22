@@ -9,6 +9,9 @@ import copy
 
 from argparse import ArgumentParser
 from PIL import Image, ImageDraw
+import numpy as np
+
+import pandas as pd 
 
 # Helper functions for parsing the map
 mapsize={'w':0,'h':0}
@@ -26,53 +29,46 @@ def parseSize(line):
     return {'w': l[2], 'h': l[3]}
 
 
-def coord2pix(x, y):
-    return (x/mapsize['w']*imgx, y/mapsize['h']*imgy)
+def coord2pix(e):
+    return (e.x/mapsize['w']*imgx, e.z/mapsize['h']*imgy)
 
 
 def dist(a, b):
-    return math.sqrt(math.pow(a['x']-b['x'], 2)+math.pow((a['z']-b['z']), 2))
+    return math.sqrt(math.pow(a.x-b.x, 2)+math.pow((a.z-b.z), 2))
 
 # Grab mexes based on distance function
 
 
-def bestMex(army, freemexes, armies):
-    mymexes = []
-    for i in army['mex']:
-        mymexes.append(mexes[i])
-    distlist = list(map(lambda mex: dist((army), (mex)), freemexes))
-    if mymexes:
-        distown = []
-        for m in freemexes:
-            do = []
-            for own in mymexes:
-                do.append(dist(own, m))
-            distown.append(min(do))
+def distancelist(list, target):
+    return np.sqrt(np.square(list.x-target.x)+np.square(list.z-target.z))
 
+def bestMex(mexes, armies, army):
+    freemexes = mexes[mexes['owner']==-1]
+    distances = distancelist(freemexes,armies.iloc[army])
+
+    mymexes = mexes[mexes['owner']==army]
+
+    if not mymexes.empty:
+        mydistances = freemexes.apply(lambda fm: distancelist(mymexes,fm).min()            
+        ,axis = 1)
     else:
-        distown = [0]*len(distlist)
+        mydistances = 0
 
-    distother = []
-    for m in freemexes:
-        d = 10000
-        for other in armies:
-            if other == army:
-                continue
-            othermexes = []
-            for i in other['mex']:
-                othermexes.append(mexes[i])
-            if othermexes:
-                odist = []
-                for othermex in othermexes:
-                    odist.append(dist(m, othermex))
-                min_odist = min(odist)
-                d = min(min_odist, d)
-        distother.append(d)
+    othermexes = mexes[(mexes['owner']!=-1) & (mexes['owner']!=army)]
 
-    score = list(map(lambda d, o, od: math.sqrt(
-        (d*d+o*o))+50/od, distlist, distown, distother))
-    d, mex = min((val, idx) for (idx, val) in enumerate(score))
-    return mex, d
+    if not othermexes.empty:
+        otherdistances = freemexes.apply(lambda fm: distancelist(othermexes,fm).min()            
+        ,axis = 1)
+    else:
+        otherdistances = 10000
+
+    
+    score = np.sqrt(np.square(distances)+np.square(mydistances))+50/otherdistances
+
+
+    mex = score.idxmin()
+    d = score.loc[mex]
+    return int(mex), float(d)
 
 
 def costs(army):
@@ -149,58 +145,49 @@ def parseMap(mapfile, imgfile):
         mexes.append(parsePosition(text[8]))
         text = text[10:]
 
-    return ((imgx,imgy),mapimage,armies,mexes)
+    armies_df = pd.DataFrame(armies)
 
-def drawTerritory(mapdrawer, armies, mexes, freei):
+    mexes_df =pd.DataFrame(mexes)
+    mexes_df['owner']=-1
+    mexes_df['starting']=False
+    return ((imgx,imgy),mapimage,armies_df,mexes_df)
+
+def drawTerritory(mapdrawer, armies, mexes):
     army_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
                    (200, 200, 0), (0, 200, 200), (200, 0, 200),
                    (255, 255, 255), (64, 64, 64),
                    (255, 100, 100), (100, 255, 100), (100, 100, 255),
                    (155, 50, 50), (50, 155, 50), (50, 50, 155)]
 
-    for l in range(50, 1, -1):
-        for i in range(len(armies)):
-            army = armies[i]
-            c = army_colors[i]+(127,)
-            loc = [coord2pix(army['x'], army['z'])]
-            if "mex" in army:
-                for mexi in army["mex"]:
-                    mex = mexes[mexi]
-                    loc.append(coord2pix(mex['x'], mex['z']))
 
-            for x, y in loc:
-                mapdrawer.ellipse((x-l/2, y-l/2, x+l/2, y+l/2),
+    mexes['pos'] = mexes.apply(coord2pix,axis=1)
+    armies['pos'] = armies.apply(coord2pix,axis=1)
+    for l in range(50, 1, -1):
+        for i,army in armies.iterrows():
+            c = army_colors[i]+(127,)
+            mapdrawer.ellipse((army.pos[0]-l/2,army.pos[1]-l/2, army.pos[0]+l/2, army.pos[1]+l/2),
                                   outline=c, fill=c, width=2)
-        loc = []
+            for m,mex in mexes[mexes['owner']==i].iterrows():
+                mapdrawer.ellipse((mex.pos[0]-l/2,mex.pos[1]-l/2, mex.pos[0]+l/2, mex.pos[1]+l/2),
+                                  outline=c, fill=c, width=2)
+
+
         c = (0, 0, 0, 0)
-        for mexi in freei:
-            mex = mexes[mexi]
-            loc.append(coord2pix(mex['x'], mex['z']))
-        for x, y in loc:
-            mapdrawer.ellipse((x-l, y-l, x+l, y+l), outline=c, fill=c, width=2)
+        for m, mex in mexes[mexes['owner']==-1].iterrows():
+            mapdrawer.ellipse((mex.pos.x-l/2,mex.pos.x-l/2, mex.pos.x+l/2, mex.pos.x+l/2),
+                                  outline=c, fill=c, width=2)
+
 
 def claimMexes(armies, mexes):
-    freemexes = mexes.copy()
-
-    for army in armies:
-        army['mex'] = []
-
     for i in range(math.floor(len(mexes)/len(armies))):
-        for army in armies:
-            closest, score = bestMex(army, freemexes, armies)
-            army['mex'].append(freemexes[closest]['i'])
-            freemexes.pop(closest)
+        for army,pos in armies.iterrows():
+            closest, score = bestMex(mexes,armies,army)
+            mexes.loc[closest,('owner')]=army
+            if dist(mexes.loc[closest],armies.loc[army])<16:
+                mexes.loc[closest,('starting')]=True
 
-    freei = list(map(lambda m: m['i'], freemexes))
 
-    army = armies[0]
-    mymexes = []
-    for i in army['mex']:
-        mymexes.append(mexes[i])
-    distlist = list(map(lambda mex: dist((army), (mex)), mymexes))
-    startingmexes = sum(map(lambda d: d < 20, distlist))
-
-    return(freei, startingmexes)
+    return len(mexes[(mexes['owner']==0) & (mexes['starting']==True)])
 
 
 
@@ -217,6 +204,7 @@ def main():
     # Parse map elements
     global mexes
     mapdata,mapimage,armies,mexes = parseMap(args.save, args.img)
+    global imgx,imgy
     imgx = mapdata[0]
     imgy = mapdata[1]
 
@@ -226,16 +214,13 @@ def main():
     ## Map parsed, strategy for distributing mexes
 
     # Claim mexes based on distance
-    for i in range(len(mexes)):
-        mexes[i]['i'] = i
-
-    (freei, startingmexes) = claimMexes(armies, mexes)
+    startingmexes = claimMexes(armies, mexes)
 
     print(f"Amount of starting mexes: {startingmexes}")
 
     # Optimize mex distribution by swapping
-    for T in range(5, 0, -1):
-        armies = anneal(armies, T)
+    # for T in range(5, 0, -1):
+    #    armies = anneal(armies, T)
 
 
     # Draw mexes on map
@@ -243,7 +228,7 @@ def main():
     meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
     mapdrawer = ImageDraw.Draw(meximage, "RGBA")
 
-    drawTerritory(mapdrawer, armies, mexes, freei)
+    drawTerritory(mapdrawer, armies, mexes)
 
     mapimage = mapimage.convert("RGBA")
     mapimage = Image.alpha_composite(mapimage, meximage)
