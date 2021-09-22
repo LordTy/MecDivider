@@ -127,6 +127,7 @@ def parseMap(mapfile, imgfile):
     mapimage = Image.open(
         imgfile)
 
+    global imgx, imgy
     imgx = mapimage.width
     imgy = mapimage.height
 
@@ -244,7 +245,7 @@ def main():
 
     drawTerritory(mapdrawer, armies, mexes, freei)
 
-    mapimage.convert("RGBA")
+    mapimage = mapimage.convert("RGBA")
     mapimage = Image.alpha_composite(mapimage, meximage)
     mapimage.save(args.out)
 
