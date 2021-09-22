@@ -118,30 +118,8 @@ def anneal(armies, T):
     return armies
 
 
-# Draw mexes assigned to army.
-
-
-def main():
-    if len(sys.argv) > 1:
-        path = sys.argv[1]
-    else:
-        path = '.'
-    files = os.listdir(path)
-    for f in files:
-        if "__preview.png" in f:
-            imgfile = os.path.join(path, f)
-        if "__save.lua" in f:
-            savefile = os.path.join(path, f)
-
-    if not savefile or not imgfile:
-        print(f"No save and prefiew file found in {path}")
-        exit()
-    else:
-        print(f"Found files:\n save: {savefile}\n preview: {imgfile}")
-
-    # Open up the map file and image
-
-    f = open(savefile, 'r')
+def parseMap(mapfile, imgfile):
+    f = open(mapfile, 'r')
     text = f.readlines()
     f.close()
 
@@ -150,11 +128,6 @@ def main():
 
     imgx = mapimage.width
     imgy = mapimage.height
-
-    meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
-    mapdrawer = ImageDraw.Draw(meximage, "RGBA")
-
-    # Parse map elements
 
     while not "AREA" in text.pop(0):
         pass
@@ -166,6 +139,7 @@ def main():
         pass
 
     armies = []
+    mexes = []
     while "ARMY" in text[0]:
         armies.append(parsePosition(text[2]))
         text = text[7:]
@@ -173,38 +147,9 @@ def main():
         mexes.append(parsePosition(text[8]))
         text = text[10:]
 
-    print(f"Amount of spawn points:{len(armies)}")
-    print(f"Amount of mexes: {len(mexes)}")
+    return ((imgx,imgy),mapimage,armies,mexes)
 
-    # Map parsed, strategy for distributing mexes
-
-    for i in range(len(mexes)):
-        mexes[i]['i'] = i
-
-    freemexes = mexes.copy()
-
-    for army in armies:
-        army['mex'] = []
-
-    for i in range(math.floor(len(mexes)/len(armies))):
-        for army in armies:
-            closest, score = bestMex(army, freemexes, armies)
-            army['mex'].append(freemexes[closest]['i'])
-            freemexes.pop(closest)
-
-    freei = list(map(lambda m: m['i'], freemexes))
-
-    army = armies[0]
-    mymexes = []
-    for i in army['mex']:
-        mymexes.append(mexes[i])
-    distlist = list(map(lambda mex: dist((army), (mex)), mymexes))
-    startingmexes = sum(map(lambda d: d < 20, distlist))
-
-    print(f"Amount of starting mexes: {startingmexes}")
-
-    for T in range(5, 0, -1):
-        armies = anneal(armies, T)
+def drawTerritory(mapdrawer, armies, mexes, freei):
     army_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
                    (200, 200, 0), (0, 200, 200), (200, 0, 200),
                    (255, 255, 255), (64, 64, 64),
@@ -231,6 +176,80 @@ def main():
             loc.append(coord2pix(mex['x'], mex['z']))
         for x, y in loc:
             mapdrawer.ellipse((x-l, y-l, x+l, y+l), outline=c, fill=c, width=2)
+
+def claimMexes(armies, mexes):
+    freemexes = mexes.copy()
+
+    for army in armies:
+        army['mex'] = []
+
+    for i in range(math.floor(len(mexes)/len(armies))):
+        for army in armies:
+            closest, score = bestMex(army, freemexes, armies)
+            army['mex'].append(freemexes[closest]['i'])
+            freemexes.pop(closest)
+
+    freei = list(map(lambda m: m['i'], freemexes))
+
+    army = armies[0]
+    mymexes = []
+    for i in army['mex']:
+        mymexes.append(mexes[i])
+    distlist = list(map(lambda mex: dist((army), (mex)), mymexes))
+    startingmexes = sum(map(lambda d: d < 20, distlist))
+
+    return(freei, startingmexes)
+
+
+
+def main():
+    if len(sys.argv) > 1:
+        path = sys.argv[1]
+    else:
+        path = '.'
+    files = os.listdir(path)
+    for f in files:
+        if "__preview.png" in f:
+            imgfile = os.path.join(path, f)
+        if "__save.lua" in f:
+            savefile = os.path.join(path, f)
+
+    if not savefile or not imgfile:
+        print(f"No save and prefiew file found in {path}")
+        exit()
+    else:
+        print(f"Found files:\n save: {savefile}\n preview: {imgfile}")
+
+    # Parse map elements
+    global mexes
+    mapdata,mapimage,armies,mexes = parseMap(savefile,imgfile)
+    imgx = mapdata[0]
+    imgy = mapdata[1]
+
+    print(f"Amount of spawn points:{len(armies)}")
+    print(f"Amount of mexes: {len(mexes)}")
+
+    ## Map parsed, strategy for distributing mexes
+
+    # Claim mexes based on distance
+    for i in range(len(mexes)):
+        mexes[i]['i'] = i
+
+    (freei, startingmexes) = claimMexes(armies, mexes)
+
+    print(f"Amount of starting mexes: {startingmexes}")
+
+    # Optimize mex distribution by swapping
+    for T in range(5, 0, -1):
+        armies = anneal(armies, T)
+
+
+    # Draw mexes on map
+
+    meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
+    mapdrawer = ImageDraw.Draw(meximage, "RGBA")
+
+    drawTerritory(mapdrawer, armies, mexes, freei)
 
     mapimage = Image.alpha_composite(mapimage, meximage)
     mapimage.save("annotated.png")
