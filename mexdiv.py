@@ -244,6 +244,7 @@ def main():
 
     drawTerritory(mapdrawer, armies, mexes, freei)
 
+    mapimage.convert("RGBA")
     mapimage = Image.alpha_composite(mapimage, meximage)
     mapimage.save(args.out)
 
