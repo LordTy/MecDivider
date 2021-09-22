@@ -7,26 +7,11 @@ import copy
 
 from PIL import Image, ImageDraw
 
-if len(sys.argv) > 1:
-    path = sys.argv[1]
-else:
-    path = '.'
-files = os.listdir(path)
-for f in files:
-    if "__preview.png" in f:
-        imgfile = os.path.join(path, f)
-    if "__save.lua" in f:
-        savefile = os.path.join(path, f)
-
-if not savefile or not imgfile:
-    print(f"No save and prefiew file found in {path}")
-    exit()
-else:
-    print(f"Found files:\n save: {savefile}\n preview: {imgfile}")
-
-
 # Helper functions for parsing the map
-
+mapsize={'w':0,'h':0}
+mexes = []
+imgx,imgy = (0,0)
+startingmexes = 0
 
 def parsePosition(line):
     l = list(map(float, line.split('(')[1].split(')')[0].split(',')))
@@ -45,49 +30,9 @@ def coord2pix(x, y):
 def dist(a, b):
     return math.sqrt(math.pow(a['x']-b['x'], 2)+math.pow((a['z']-b['z']), 2))
 
-# Open up the map file and image
-
-
-f = open(savefile, 'r')
-text = f.readlines()
-f.close()
-
-mapimage = Image.open(
-    imgfile)
-
-imgx = mapimage.width
-imgy = mapimage.height
-
-meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
-mapdrawer = ImageDraw.Draw(meximage, "RGBA")
-
-# Parse map elements
-
-while not "AREA" in text.pop(0):
-    pass
-mapsize = parseSize(text[0])
-
-print(f"Map size: {mapsize['w']}x{mapsize['h']}")
-while not "Markers = " in text.pop(0):
-    pass
-
-armies = []
-while "ARMY" in text[0]:
-    armies.append(parsePosition(text[2]))
-    text = text[7:]
-mexes = []
-while "Mex" in text[0]:
-    mexes.append(parsePosition(text[8]))
-    text = text[10:]
-
-print(f"Amount of spawn points:{len(armies)}")
-print(f"Amount of mexes: {len(mexes)}")
-
-
-# Map parsed, strategy for distributing mexes
-
-
 # Grab mexes based on distance function
+
+
 def bestMex(army, freemexes, armies):
     mymexes = []
     for i in army['mex']:
@@ -125,34 +70,6 @@ def bestMex(army, freemexes, armies):
         (d*d+o*o))+50/od, distlist, distown, distother))
     d, mex = min((val, idx) for (idx, val) in enumerate(score))
     return mex, d
-
-
-for i in range(len(mexes)):
-    mexes[i]['i'] = i
-
-freemexes = mexes.copy()
-
-for army in armies:
-    army['mex'] = []
-
-for i in range(math.floor(len(mexes)/len(armies))):
-    for army in armies:
-        closest, score = bestMex(army, freemexes, armies)
-        army['mex'].append(freemexes[closest]['i'])
-        freemexes.pop(closest)
-
-freei = list(map(lambda m: m['i'], freemexes))
-
-army = armies[0]
-mymexes = []
-for i in army['mex']:
-    mymexes.append(mexes[i])
-distlist = list(map(lambda mex: dist((army), (mex)),mymexes))
-startingmexes = sum(map(lambda d: d<20,distlist))
-
-print(f"Amount of starting mexes: {startingmexes}")
-
-# Anneel mex distribution based on cost function
 
 
 def costs(army):
@@ -199,41 +116,126 @@ def anneal(armies, T):
     return armies
 
 
-for T in range(5, 0, -1):
-    armies = anneal(armies, T)
-
-
 # Draw mexes assigned to army.
 
-army_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
-               (200, 200, 0), (0, 200, 200), (200, 0, 200),
-               (255, 255, 255), (64, 64, 64),
-               (255, 100, 100), (100, 255, 100), (100, 100, 255),
-               (155, 50, 50), (50, 155, 50), (50, 50, 155)]
 
+def main():
+    if len(sys.argv) > 1:
+        path = sys.argv[1]
+    else:
+        path = '.'
+    files = os.listdir(path)
+    for f in files:
+        if "__preview.png" in f:
+            imgfile = os.path.join(path, f)
+        if "__save.lua" in f:
+            savefile = os.path.join(path, f)
 
-for l in range(50, 1, -1):
-    for i in range(len(armies)):
-        army = armies[i]
-        c = army_colors[i]+(127,)
-        loc = [coord2pix(army['x'], army['z'])]
-        if "mex" in army:
-            for mexi in army["mex"]:
-                mex = mexes[mexi]
-                loc.append(coord2pix(mex['x'], mex['z']))
+    if not savefile or not imgfile:
+        print(f"No save and prefiew file found in {path}")
+        exit()
+    else:
+        print(f"Found files:\n save: {savefile}\n preview: {imgfile}")
 
+    # Open up the map file and image
+
+    f = open(savefile, 'r')
+    text = f.readlines()
+    f.close()
+
+    mapimage = Image.open(
+        imgfile)
+
+    imgx = mapimage.width
+    imgy = mapimage.height
+
+    meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
+    mapdrawer = ImageDraw.Draw(meximage, "RGBA")
+
+    # Parse map elements
+
+    while not "AREA" in text.pop(0):
+        pass
+    global mapsize
+    mapsize = parseSize(text[0])
+
+    print(f"Map size: {mapsize['w']}x{mapsize['h']}")
+    while not "Markers = " in text.pop(0):
+        pass
+
+    armies = []
+    while "ARMY" in text[0]:
+        armies.append(parsePosition(text[2]))
+        text = text[7:]
+    while "Mex" in text[0]:
+        mexes.append(parsePosition(text[8]))
+        text = text[10:]
+
+    print(f"Amount of spawn points:{len(armies)}")
+    print(f"Amount of mexes: {len(mexes)}")
+
+    # Map parsed, strategy for distributing mexes
+
+    for i in range(len(mexes)):
+        mexes[i]['i'] = i
+
+    freemexes = mexes.copy()
+
+    for army in armies:
+        army['mex'] = []
+
+    for i in range(math.floor(len(mexes)/len(armies))):
+        for army in armies:
+            closest, score = bestMex(army, freemexes, armies)
+            army['mex'].append(freemexes[closest]['i'])
+            freemexes.pop(closest)
+
+    freei = list(map(lambda m: m['i'], freemexes))
+
+    army = armies[0]
+    mymexes = []
+    for i in army['mex']:
+        mymexes.append(mexes[i])
+    distlist = list(map(lambda mex: dist((army), (mex)), mymexes))
+    startingmexes = sum(map(lambda d: d < 20, distlist))
+
+    print(f"Amount of starting mexes: {startingmexes}")
+
+    for T in range(5, 0, -1):
+        armies = anneal(armies, T)
+    army_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
+                   (200, 200, 0), (0, 200, 200), (200, 0, 200),
+                   (255, 255, 255), (64, 64, 64),
+                   (255, 100, 100), (100, 255, 100), (100, 100, 255),
+                   (155, 50, 50), (50, 155, 50), (50, 50, 155)]
+
+    for l in range(50, 1, -1):
+        for i in range(len(armies)):
+            army = armies[i]
+            c = army_colors[i]+(127,)
+            loc = [coord2pix(army['x'], army['z'])]
+            if "mex" in army:
+                for mexi in army["mex"]:
+                    mex = mexes[mexi]
+                    loc.append(coord2pix(mex['x'], mex['z']))
+
+            for x, y in loc:
+                mapdrawer.ellipse((x-l/2, y-l/2, x+l/2, y+l/2),
+                                  outline=c, fill=c, width=2)
+        loc = []
+        c = (0, 0, 0, 0)
+        for mexi in freei:
+            mex = mexes[mexi]
+            loc.append(coord2pix(mex['x'], mex['z']))
         for x, y in loc:
-            mapdrawer.ellipse((x-l/2, y-l/2, x+l/2, y+l/2),
-                              outline=c, fill=c, width=2)
-    loc = []
-    c = (0, 0, 0, 0)
-    for mexi in freei:
-        mex = mexes[mexi]
-        loc.append(coord2pix(mex['x'], mex['z']))
-    for x, y in loc:
-        mapdrawer.ellipse((x-l, y-l, x+l, y+l), outline=c, fill=c, width=2)
+            mapdrawer.ellipse((x-l, y-l, x+l, y+l), outline=c, fill=c, width=2)
+
+    mapimage = Image.alpha_composite(mapimage, meximage)
+    mapimage.save("annotated.png")
 
 
-mapimage = Image.alpha_composite(mapimage, meximage)
-mapimage.save("annotated.png")
+if __name__ == "__main__":
+    main()
+
+
 pass
