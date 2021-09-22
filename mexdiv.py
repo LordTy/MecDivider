@@ -38,30 +38,45 @@ def dist(a, b):
     return math.sqrt(math.pow(a.x-b.x, 2)+math.pow((a.z-b.z), 2))
 
 # Grab mexes based on distance function
+def distancelist(target: pd.DataFrame, list: pd.DataFrame):
+    return ((list.x-target.x) ** 2 + (list.z-target.z) ** 2).pow(0.5)
 
 
-def distancelist(list, target):
-    return np.sqrt(np.square(list.x-target.x)+np.square(list.z-target.z))
+def distancelist_min(target, list):
+    result = distancelist(list, target).min()
+    return result
+
+
+def army_distancelist_cached(targets, army):
+    return mex2army.loc[list(targets), list(army)]
+
+
+def mex_distancelist_cached(targets, others):
+    return mex2mex.loc[list(targets), list(others)]
+
+
+def distancelist_min_cached(targets, others):
+    result = mex_distancelist_cached(targets, others)
+    return result.min(axis=1)
+
 
 def bestMex(mexes, armies, army):
     freemexes = mexes[mexes['owner']==-1]
-    distances = distancelist(freemexes,armies.iloc[army])
-
     mymexes = mexes[mexes['owner']==army]
 
-    if not mymexes.empty:
-        mydistances = freemexes.apply(lambda fm: distancelist(mymexes,fm).min()            
-        ,axis = 1)
-    else:
+    distances = army_distancelist_cached(freemexes.index, [army])[army]
+
+    if mymexes.empty:
         mydistances = 0
+    else:
+        mydistances = distancelist_min_cached(freemexes.index, mymexes.index)
 
     othermexes = mexes[(mexes['owner']!=-1) & (mexes['owner']!=army)]
 
-    if not othermexes.empty:
-        otherdistances = freemexes.apply(lambda fm: distancelist(othermexes,fm).min()            
-        ,axis = 1)
-    else:
+    if othermexes.empty:
         otherdistances = 10000
+    else:
+        otherdistances = distancelist_min_cached(freemexes.index, othermexes.index)
 
     
     score = np.sqrt(np.square(distances)+np.square(mydistances))+50/otherdistances
@@ -205,9 +220,12 @@ def main():
     # Parse map elements
     global mexes
     mapdata,mapimage,armies,mexes = parseMap(args.save, args.img)
-    global imgx,imgy
+    global imgx, imgy, mex2mex, mex2army
     imgx = mapdata[0]
     imgy = mapdata[1]
+
+    mex2mex = mexes.apply(distancelist, result_type='expand', axis=1, list=mexes)
+    mex2army = mexes.apply(distancelist, result_type='expand', axis=1, list=armies)
 
     print(f"Amount of spawn points:{len(armies)}")
     print(f"Amount of mexes: {len(mexes)}")
