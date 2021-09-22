@@ -6,6 +6,7 @@ import re
 import math
 import random
 import copy
+import time
 
 from argparse import ArgumentParser
 from PIL import Image, ImageDraw
@@ -214,9 +215,11 @@ def main():
     ## Map parsed, strategy for distributing mexes
 
     # Claim mexes based on distance
+    t = time.time()
     startingmexes = claimMexes(armies, mexes)
-
+    te = time.time()-t
     print(f"Amount of starting mexes: {startingmexes}")
+    print(f"Ellapsed time: {te}")
 
     # Optimize mex distribution by swapping
     # for T in range(5, 0, -1):
