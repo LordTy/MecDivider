@@ -13,15 +13,15 @@ else:
     files = os.listdir(".")
 for f in files:
     if "__preview.png" in f:
-        imgfile = f
+        imgfile = os.path.join(sys.argv[1],f)
     if "__save.lua" in f:
-        savefile = f
+        savefile = os.path.join(sys.argv[1],f)
 
 if not savefile or not imgfile:
     print(f"No save and prefiew file found in {sys.argv[1]}")
     exit()
 else:
-    print(f"Found files:\n save: {savefile}\n previes: {imgfile}")
+    print(f"Found files:\n save: {savefile}\n preview: {imgfile}")
 
 
 
@@ -54,7 +54,7 @@ text = f.readlines()
 f.close()
 
 mapimage = Image.open(
-    "neroxis_map_generator_1.7.1_tktdyh4g555zw_biiaeba__preview.png")
+    imgfile)
 
 imgx = mapimage.width
 imgy = mapimage.height
@@ -151,21 +151,21 @@ def costs(army):
     for i in army['mex']:
         am.append(mexes[i])
     costs = 0
-    costs = math.sqrt(sum(map(lambda m: pow(dist(army,m),4),am)))
+    costs = sum(map(lambda m: pow(max(dist(army,m),0),2),am))
     return costs
 
 def totalcosts(armies):
     cl = list(map(costs,armies))
     mc = min(cl)
-    return math.sqrt(sum(map(lambda c: math.pow(c,2),cl)))
+    return sum(map(lambda c: math.pow(c,2),cl))
 
 
 def randomSwap(armies):
     victims = random.sample(armies,2)
     l1 = victims[0]['mex']
     l2 = victims[1]['mex']
-    e1 = random.choice(victims[0]['mex'])
-    e2 = random.choice(victims[1]['mex'])
+    e1 = random.choice(victims[0]['mex'][4:])
+    e2 = random.choice(victims[1]['mex'][4:])
     l2[l2.index(e2)]=e1
     l1[l1.index(e1)]=e2
     pass
@@ -174,7 +174,7 @@ def randomSwap(armies):
 
 def anneal(armies, T):
     print(f"Old costs: {totalcosts(armies)}")
-    for i in range(1000):
+    for i in range(10000):
         narmies = copy.deepcopy(armies)
         for i in range(random.randint(1,T)):
             randomSwap(narmies)
@@ -184,14 +184,14 @@ def anneal(armies, T):
             armies = narmies
         else:
             diff = nc-oc
-            if random.random() < math.exp(-diff/T/10):
+            if random.random() < math.exp(-diff/T/1000000):
                 armies = narmies
     print(f"New costs: {totalcosts(armies)}")
     return armies
 
 
-# for T in range(2,1,-1):
-#    armies = anneal(armies,T)
+for T in range(5,0,-1):
+    armies = anneal(armies,T)
 
 
 
