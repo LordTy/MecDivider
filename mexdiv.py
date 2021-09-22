@@ -8,17 +8,18 @@ import copy
 from PIL import Image, ImageDraw
 
 if len(sys.argv) > 1:
-    files = os.listdir(sys.argv[1])
+    path = sys.argv[1]
 else:
-    files = os.listdir(".")
+    path = '.'
+files = os.listdir(path)
 for f in files:
     if "__preview.png" in f:
-        imgfile = os.path.join(sys.argv[1], f)
+        imgfile = os.path.join(path, f)
     if "__save.lua" in f:
-        savefile = os.path.join(sys.argv[1], f)
+        savefile = os.path.join(path, f)
 
 if not savefile or not imgfile:
-    print(f"No save and prefiew file found in {sys.argv[1]}")
+    print(f"No save and prefiew file found in {path}")
     exit()
 else:
     print(f"Found files:\n save: {savefile}\n preview: {imgfile}")
@@ -142,6 +143,15 @@ for i in range(math.floor(len(mexes)/len(armies))):
 
 freei = list(map(lambda m: m['i'], freemexes))
 
+army = armies[0]
+mymexes = []
+for i in army['mex']:
+    mymexes.append(mexes[i])
+distlist = list(map(lambda mex: dist((army), (mex)),mymexes))
+startingmexes = sum(map(lambda d: d<20,distlist))
+
+print(f"Amount of starting mexes: {startingmexes}")
+
 # Anneel mex distribution based on cost function
 
 
@@ -164,8 +174,8 @@ def randomSwap(armies):
     victims = random.sample(armies, 2)
     l1 = victims[0]['mex']
     l2 = victims[1]['mex']
-    e1 = random.choice(victims[0]['mex'][4:])
-    e2 = random.choice(victims[1]['mex'][4:])
+    e1 = random.choice(victims[0]['mex'][startingmexes:])
+    e2 = random.choice(victims[1]['mex'][startingmexes:])
     l2[l2.index(e2)] = e1
     l1[l1.index(e1)] = e2
     pass
