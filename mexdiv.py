@@ -7,23 +7,21 @@ import copy
 
 from PIL import Image, ImageDraw
 
-if len(sys.argv)>1:
+if len(sys.argv) > 1:
     files = os.listdir(sys.argv[1])
 else:
     files = os.listdir(".")
 for f in files:
     if "__preview.png" in f:
-        imgfile = os.path.join(sys.argv[1],f)
+        imgfile = os.path.join(sys.argv[1], f)
     if "__save.lua" in f:
-        savefile = os.path.join(sys.argv[1],f)
+        savefile = os.path.join(sys.argv[1], f)
 
 if not savefile or not imgfile:
     print(f"No save and prefiew file found in {sys.argv[1]}")
     exit()
 else:
     print(f"Found files:\n save: {savefile}\n preview: {imgfile}")
-
-
 
 
 # Helper functions for parsing the map
@@ -146,41 +144,42 @@ freei = list(map(lambda m: m['i'], freemexes))
 
 # Anneel mex distribution based on cost function
 
+
 def costs(army):
     am = []
     for i in army['mex']:
         am.append(mexes[i])
     costs = 0
-    costs = sum(map(lambda m: pow(max(dist(army,m),0),2),am))
+    costs = sum(map(lambda m: pow(max(dist(army, m), 0), 2), am))
     return costs
 
+
 def totalcosts(armies):
-    cl = list(map(costs,armies))
+    cl = list(map(costs, armies))
     mc = min(cl)
-    return sum(map(lambda c: math.pow(c,2),cl))
+    return sum(map(lambda c: math.pow(c, 2), cl))
 
 
 def randomSwap(armies):
-    victims = random.sample(armies,2)
+    victims = random.sample(armies, 2)
     l1 = victims[0]['mex']
     l2 = victims[1]['mex']
     e1 = random.choice(victims[0]['mex'][4:])
     e2 = random.choice(victims[1]['mex'][4:])
-    l2[l2.index(e2)]=e1
-    l1[l1.index(e1)]=e2
+    l2[l2.index(e2)] = e1
+    l1[l1.index(e1)] = e2
     pass
-
 
 
 def anneal(armies, T):
     print(f"Old costs: {totalcosts(armies)}")
     for i in range(10000):
         narmies = copy.deepcopy(armies)
-        for i in range(random.randint(1,T)):
+        for i in range(random.randint(1, T)):
             randomSwap(narmies)
         oc = totalcosts(armies)
         nc = totalcosts(narmies)
-        if nc<oc:
+        if nc < oc:
             armies = narmies
         else:
             diff = nc-oc
@@ -190,18 +189,8 @@ def anneal(armies, T):
     return armies
 
 
-for T in range(5,0,-1):
-    armies = anneal(armies,T)
-
-
-
-
-
-
-
-
-
-
+for T in range(5, 0, -1):
+    armies = anneal(armies, T)
 
 
 # Draw mexes assigned to army.
