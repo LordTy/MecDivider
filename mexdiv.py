@@ -87,48 +87,40 @@ def bestMex(mexes, armies, army):
     return int(mex), float(d)
 
 
-def costs(army):
-    am = []
-    for i in army['mex']:
-        am.append(mexes[i])
-    costs = 0
-    costs = sum(map(lambda m: pow(max(dist(army, m), 0), 2), am))
-    return costs
+def costs(army,mexes):
+    return np.sum(np.square(army_distancelist_cached(mexes[mexes['owner']==army.name].index,[army.name]))).iloc[0]
 
 
-def totalcosts(armies):
-    cl = list(map(costs, armies))
-    mc = min(cl)
-    return sum(map(lambda c: math.pow(c, 2), cl))
+def totalcosts(armies,mexes):
+    cl = armies.apply(costs,axis=1,mexes=mexes)
+    return np.sum(np.square(cl))
 
 
-def randomSwap(armies):
-    victims = random.sample(armies, 2)
-    l1 = victims[0]['mex']
-    l2 = victims[1]['mex']
-    e1 = random.choice(victims[0]['mex'][startingmexes:])
-    e2 = random.choice(victims[1]['mex'][startingmexes:])
-    l2[l2.index(e2)] = e1
-    l1[l1.index(e1)] = e2
-    pass
+def randomSwap(armies,mexes):
+    victims = armies.sample(n=2).index
+    e1 = mexes[mexes['owner']==victims[0]].sample(n=1).index
+    e2 = mexes[mexes['owner']==victims[1]].sample(n=1).index
+    mexes.loc[e1,('owner')]=victims[1]
+    mexes.loc[e2,('owner')]=victims[0]
 
 
-def anneal(armies, T):
-    print(f"Old costs: {totalcosts(armies)}")
-    for i in range(10000):
-        narmies = copy.deepcopy(armies)
+def anneal(armies, mexes, T):
+    print(f"Old costs: {totalcosts(armies,mexes)}")
+    newmexes = mexes.copy()
+    for i in range(1000):
+        newmexes['owner']=mexes['owner']
         for i in range(random.randint(1, T)):
-            randomSwap(narmies)
-        oc = totalcosts(armies)
-        nc = totalcosts(narmies)
+            randomSwap(armies,newmexes)
+        oc = totalcosts(armies,mexes)
+        nc = totalcosts(armies,newmexes)
         if nc < oc:
-            armies = narmies
+            mexes['owner']=newmexes['owner']
         else:
             diff = nc-oc
             if random.random() < math.exp(-diff/T/1000000):
-                armies = narmies
-    print(f"New costs: {totalcosts(armies)}")
-    return armies
+                mexes['owner']=newmexes['owner']
+    print(f"New costs: {totalcosts(armies,mexes)}")
+    return armies, mexes
 
 
 def parseMap(mapfile, imgfile):
@@ -246,11 +238,14 @@ def main():
     print(f"Amount of starting mexes: {startingmexes}")
     print(f"Claim Ellapsed time: {te}")
 
+
+
     # Optimize mex distribution by swapping
-    # for T in range(5, 0, -1):
-    #    armies = anneal(armies, T)
-
-
+    t = time.time()
+    for T in range(5, 0, -1):
+       armies,mexes = anneal(armies,mexes, T)
+    te = time.time()-t
+    print(f"Anneal Ellapsed time: {te}")
     # Draw mexes on map
 
     meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
