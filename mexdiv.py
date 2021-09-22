@@ -178,21 +178,28 @@ def drawTerritory(mapdrawer, armies, mexes):
 
     mexes['pos'] = mexes.apply(coord2pix,axis=1)
     armies['pos'] = armies.apply(coord2pix,axis=1)
+
+    drawtargets = []
+
+    for i,army in armies.iterrows():
+        c = army_colors[i]+(127,)
+        targets = [(army.pos[0],army.pos[1])]
+        for m,mex in mexes[mexes['owner']==i].iterrows():
+            targets.append((mex.pos[0],mex.pos[1]))
+        drawtargets.append({'color':c,'targets':targets})
+
+    c = (0, 0, 0, 0)
+    targets = []
+    for m, mex in mexes[mexes['owner']==-1].iterrows():
+            targets.append((mex.pos[0],mex.pos[1]))
+    drawtargets.append({'color':c,'targets':targets})
+
     for l in range(50, 1, -1):
-        for i,army in armies.iterrows():
-            c = army_colors[i]+(127,)
-            mapdrawer.ellipse((army.pos[0]-l/2,army.pos[1]-l/2, army.pos[0]+l/2, army.pos[1]+l/2),
-                                  outline=c, fill=c, width=2)
-            for m,mex in mexes[mexes['owner']==i].iterrows():
-                mapdrawer.ellipse((mex.pos[0]-l/2,mex.pos[1]-l/2, mex.pos[0]+l/2, mex.pos[1]+l/2),
-                                  outline=c, fill=c, width=2)
-
-
-        c = (0, 0, 0, 0)
-        for m, mex in mexes[mexes['owner']==-1].iterrows():
-            mapdrawer.ellipse((mex.pos.x-l/2,mex.pos.x-l/2, mex.pos.x+l/2, mex.pos.x+l/2),
-                                  outline=c, fill=c, width=2)
-
+        for t in drawtargets:
+            c=t['color']
+            for p in t['targets']:
+                mapdrawer.ellipse((p[0]-l/2,p[1]-l/2, p[0]+l/2, p[1]+l/2),
+                                  fill=c)
 
 def claimMexes(armies, mexes):
     for i in range(math.floor(len(mexes)/len(armies))):
@@ -237,7 +244,7 @@ def main():
     startingmexes = claimMexes(armies, mexes)
     te = time.time()-t
     print(f"Amount of starting mexes: {startingmexes}")
-    print(f"Ellapsed time: {te}")
+    print(f"Claim Ellapsed time: {te}")
 
     # Optimize mex distribution by swapping
     # for T in range(5, 0, -1):
@@ -249,7 +256,10 @@ def main():
     meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
     mapdrawer = ImageDraw.Draw(meximage, "RGBA")
 
+    t = time.time()
     drawTerritory(mapdrawer, armies, mexes)
+    te = time.time()-t
+    print(f"Draw Ellapsed time: {te}")
 
     mapimage = mapimage.convert("RGBA")
     mapimage = Image.alpha_composite(mapimage, meximage)
