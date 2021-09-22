@@ -7,6 +7,7 @@ import math
 import random
 import copy
 
+from argparse import ArgumentParser
 from PIL import Image, ImageDraw
 
 # Helper functions for parsing the map
@@ -203,26 +204,18 @@ def claimMexes(armies, mexes):
 
 
 def main():
-    if len(sys.argv) > 1:
-        path = sys.argv[1]
-    else:
-        path = '.'
-    files = os.listdir(path)
-    for f in files:
-        if "__preview.png" in f:
-            imgfile = os.path.join(path, f)
-        if "__save.lua" in f:
-            savefile = os.path.join(path, f)
-
-    if not savefile or not imgfile:
-        print(f"No save and prefiew file found in {path}")
-        exit()
-    else:
-        print(f"Found files:\n save: {savefile}\n preview: {imgfile}")
+    parser = ArgumentParser(description='Calculate the distribution of mass extractors.')
+    parser.add_argument('-p', '--preview', dest='img',  type=str, required=True,
+                        help='Preview (PNG) file.')
+    parser.add_argument('-s', '--save',    dest='save', type=str, required=True,
+                        help='Save (LUA) file.')
+    parser.add_argument('-o', '--out',     dest='out',  type=str, default='annotated.png',
+                        help='Output file.')
+    args = parser.parse_args()
 
     # Parse map elements
     global mexes
-    mapdata,mapimage,armies,mexes = parseMap(savefile,imgfile)
+    mapdata,mapimage,armies,mexes = parseMap(args.save, args.img)
     imgx = mapdata[0]
     imgy = mapdata[1]
 
@@ -252,7 +245,7 @@ def main():
     drawTerritory(mapdrawer, armies, mexes, freei)
 
     mapimage = Image.alpha_composite(mapimage, meximage)
-    mapimage.save("annotated.png")
+    mapimage.save(args.out)
 
 
 if __name__ == "__main__":
