@@ -86,39 +86,72 @@ def bestMex(mexes, armies, army):
     d = score.loc[mex]
     return int(mex), float(d)
 
+armycosts = [];
 
 def costs(army,mexes):
     return np.sum(np.square(army_distancelist_cached(mexes[mexes['owner']==army.name].index,[army.name]))).iloc[0]
 
 
 def totalcosts(armies,mexes):
-    cl = armies.apply(costs,axis=1,mexes=mexes)
+    global armycosts
+    if len(armycosts)==0:
+        for i,army in armies.iterrows():
+            armycosts.insert(i,{'dirty':False,'costs':costs(army,mexes)})
+
+    cl = [];
+    for ac in range(len(armycosts)):
+        army = armycosts[ac]
+        if army['dirty']==False:
+            cl.append(army['costs'])
+        else:
+            army['costs']=costs(armies.loc[ac],mexes)
+            cl.append(army['costs'])
+            army['dirty']==True
     return np.sum(np.square(cl))
 
 
 def randomSwap(armies,mexes):
-    victims = armies.sample(n=2).index
-    e1 = mexes[mexes['owner']==victims[0]].sample(n=1).index
-    e2 = mexes[mexes['owner']==victims[1]].sample(n=1).index
+    global armycosts
+    validpair = False
+    while not validpair:
+        e1 = random.randint(0,len(mexes)-1)
+        e2 = random.randint(0,len(mexes)-1)
+        victims= mexes.iloc[e1,3],mexes.iloc[e2,3]
+        validpair = not mexes.iloc[e1,4] and not mexes.iloc[e1,4] and not victims[0]==victims[1]
+
+
+    
+    # e1 = mexes[(mexes['owner']==victims[0]) & (mexes['starting']==False)].sample(n=1).index
+    # e2 = mexes[(mexes['owner']==victims[1]) & (mexes['starting']==False)].sample(n=1).index
     mexes.loc[e1,('owner')]=victims[1]
     mexes.loc[e2,('owner')]=victims[0]
 
+    armycosts[victims[0]]['costs']+= math.pow(mex2army.iloc[e2,victims[0]],2) - math.pow(mex2army.iloc[e1,victims[0]],2)
+    armycosts[victims[1]]['costs']+= math.pow(mex2army.iloc[e1,victims[1]],2) - math.pow(mex2army.iloc[e2,victims[1]],2)
+
+    armycosts[victims[0]]['dirty']=False
+    armycosts[victims[1]]['dirty']=False
 
 def anneal(armies, mexes, T):
     print(f"Old costs: {totalcosts(armies,mexes)}")
+    global armycosts
     newmexes = mexes.copy()
-    for i in range(1000):
+    for i in range(10000):
         newmexes['owner']=mexes['owner']
+        oc = totalcosts(armies,mexes)
+        oldcosts = copy.deepcopy(armycosts)
         for i in range(random.randint(1, T)):
             randomSwap(armies,newmexes)
-        oc = totalcosts(armies,mexes)
         nc = totalcosts(armies,newmexes)
+
         if nc < oc:
             mexes['owner']=newmexes['owner']
         else:
             diff = nc-oc
             if random.random() < math.exp(-diff/T/1000000):
                 mexes['owner']=newmexes['owner']
+            else:
+                armycosts=oldcosts
     print(f"New costs: {totalcosts(armies,mexes)}")
     return armies, mexes
 
