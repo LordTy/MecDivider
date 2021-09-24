@@ -116,40 +116,42 @@ def randomSwap(armies,mexes):
     while not validpair:
         e1 = random.randint(0,len(mexes)-1)
         e2 = random.randint(0,len(mexes)-1)
-        victims= mexes.iloc[e1,3],mexes.iloc[e2,3]
-        validpair = not mexes.iloc[e1,4] and not mexes.iloc[e1,4] and not victims[0]==victims[1]
+        victims= mexes[e1],mexes[e2]
+        validpair = not mexStarter_np_cache[e1] and not mexStarter_np_cache[e1] and not victims[0]==victims[1]
 
 
     
     # e1 = mexes[(mexes['owner']==victims[0]) & (mexes['starting']==False)].sample(n=1).index
     # e2 = mexes[(mexes['owner']==victims[1]) & (mexes['starting']==False)].sample(n=1).index
-    mexes.loc[e1,('owner')]=victims[1]
-    mexes.loc[e2,('owner')]=victims[0]
+    mexes[e1]=victims[1]
+    mexes[e2]=victims[0]
 
-    armycosts[victims[0]]['costs']+= math.pow(mex2army.iloc[e2,victims[0]],2) - math.pow(mex2army.iloc[e1,victims[0]],2)
-    armycosts[victims[1]]['costs']+= math.pow(mex2army.iloc[e1,victims[1]],2) - math.pow(mex2army.iloc[e2,victims[1]],2)
+    armycosts[victims[0]]['costs']+= math.pow(mex2army_np_cache[e2,victims[0]],2) - math.pow(mex2army_np_cache[e1,victims[0]],2)
+    armycosts[victims[1]]['costs']+= math.pow(mex2army_np_cache[e1,victims[1]],2) - math.pow(mex2army_np_cache[e2,victims[1]],2)
 
     armycosts[victims[0]]['dirty']=False
     armycosts[victims[1]]['dirty']=False
 
+    return mexes
+
 def anneal(armies, mexes, T):
     print(f"Old costs: {totalcosts(armies,mexes)}")
-    global armycosts
-    newmexes = mexes.copy()
+    global armycosts,mexOwner_np_cache
+    
     for i in range(10000):
-        newmexes['owner']=mexes['owner']
+        newmexes = mexOwner_np_cache.copy()
         oc = totalcosts(armies,mexes)
         oldcosts = copy.deepcopy(armycosts)
         for i in range(random.randint(1, T)):
-            randomSwap(armies,newmexes)
+            newmexes = randomSwap(armies,newmexes)
         nc = totalcosts(armies,newmexes)
 
         if nc < oc:
-            mexes['owner']=newmexes['owner']
+            mexOwner_np_cache=newmexes
         else:
             diff = nc-oc
             if random.random() < math.exp(-diff/T/1000000):
-                mexes['owner']=newmexes['owner']
+                mexOwner_np_cache=newmexes
             else:
                 armycosts=oldcosts
     print(f"New costs: {totalcosts(armies,mexes)}")
@@ -253,11 +255,13 @@ def main():
     global mexes
     mapdata,mapimage,armies,mexes = parseMap(args.save, args.img)
     global imgx, imgy, mex2mex, mex2army
+    global mex2army_np_cache
     imgx = mapdata[0]
     imgy = mapdata[1]
 
     mex2mex = mexes.apply(distancelist, result_type='expand', axis=1, list=mexes)
     mex2army = mexes.apply(distancelist, result_type='expand', axis=1, list=armies)
+    mex2army_np_cache = np.array(mex2army)
 
     print(f"Amount of spawn points:{len(armies)}")
     print(f"Amount of mexes: {len(mexes)}")
@@ -275,9 +279,18 @@ def main():
 
     # Optimize mex distribution by swapping
     t = time.time()
+
+    global mexOwner_np_cache, mexStarter_np_cache
+    mexOwner_np_cache = np.array(mexes['owner'])
+    mexStarter_np_cache = np.array(mexes['starting'])
     for T in range(5, 0, -1):
        armies,mexes = anneal(armies,mexes, T)
+
+    mexes['owner']=mexOwner_np_cache
+    
     te = time.time()-t
+
+
     print(f"Anneal Ellapsed time: {te}")
     # Draw mexes on map
 
