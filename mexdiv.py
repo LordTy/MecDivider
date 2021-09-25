@@ -117,7 +117,7 @@ def randomSwap(armies,mexes):
         e1 = random.randint(0,len(mexes)-1)
         e2 = random.randint(0,len(mexes)-1)
         victims= mexes[e1],mexes[e2]
-        validpair = not mexStarter_np_cache[e1] and not mexStarter_np_cache[e1] and not victims[0]==victims[1]
+        validpair = not mexStarter_np_cache[e1] and not mexStarter_np_cache[e2] and not victims[0]==victims[1]
 
 
     
