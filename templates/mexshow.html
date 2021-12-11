@@ -1,0 +1,23 @@
+<html>
+    <body>
+    <a href="{{url}}">
+        <img src="/static/annotated.png?{{rnum}}" alt="My Image" height=512px ismap>
+    </a>
+    {% if player>=0 %}
+    <h3 style="background-color:{{pcolor}}"> You are army {{player}}</h3>
+    <form action="/changecolor/{{player}}", method="post">
+        <label for="armycolor">Change color:</label>
+        <input type="color" id="armycolor" name="armycolor" value="#{{pcolor}}">
+        <input type="submit">
+    </form>
+    {% endif %}
+    
+    <p>
+    {% for a in armies %}
+        <a href="{{a.url}}" style="background-color:{{a.color}};">
+            Army {{ a.id }}
+        </a>
+    {% endfor %}
+    </p>
+    </body>
+</html>

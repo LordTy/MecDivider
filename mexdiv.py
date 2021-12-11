@@ -12,13 +12,25 @@ from argparse import ArgumentParser
 from PIL import Image, ImageDraw
 import numpy as np
 
+import matplotlib
 import pandas as pd 
+
+from flask import Flask,request,render_template, redirect
+from werkzeug.datastructures import _unicodify_header_value
+import logging
 
 # Helper functions for parsing the map
 mapsize={'w':0,'h':0}
 mexes = []
 imgx,imgy = (0,0)
 startingmexes = 0
+
+
+army_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
+            (200, 200, 0), (0, 200, 200), (200, 0, 200),
+            (255, 255, 255), (64, 64, 64),
+            (255, 100, 100), (100, 255, 100), (100, 100, 255),
+            (155, 50, 50), (50, 155, 50), (50, 50, 155)]
 
 def parsePosition(line):
     l = list(map(float, line.split('(')[1].split(')')[0].split(',')))
@@ -134,11 +146,11 @@ def randomSwap(armies,mexes):
 
     return mexes
 
-def anneal(armies, mexes, T):
+def anneal(armies, mexes, T,cycles):
     print(f"Old costs: {totalcosts(armies,mexes)}")
     global armycosts,mexOwner_np_cache
     
-    for i in range(10000):
+    for i in range(cycles):
         newmexes = mexOwner_np_cache.copy()
         oc = totalcosts(armies,mexes)
         oldcosts = copy.deepcopy(armycosts)
@@ -196,11 +208,8 @@ def parseMap(mapfile, imgfile):
     return ((imgx,imgy),mapimage,armies_df,mexes_df)
 
 def drawTerritory(mapdrawer, armies, mexes):
-    army_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255),
-                   (200, 200, 0), (0, 200, 200), (200, 0, 200),
-                   (255, 255, 255), (64, 64, 64),
-                   (255, 100, 100), (100, 255, 100), (100, 100, 255),
-                   (155, 50, 50), (50, 155, 50), (50, 50, 155)]
+    global army_colors
+
 
 
     mexes['pos'] = mexes.apply(coord2pix,axis=1)
@@ -239,6 +248,18 @@ def claimMexes(armies, mexes):
 
     return len(mexes[(mexes['owner']==0) & (mexes['starting']==True)])
 
+def createMexImage(mapimage,mexes,armies,output):
+    meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
+    mapdrawer = ImageDraw.Draw(meximage, "RGBA")
+
+    t = time.time()
+    drawTerritory(mapdrawer, armies, mexes)
+    te = time.time()-t
+    print(f"Draw Ellapsed time: {te}")
+
+    mapimage = mapimage.convert("RGBA")
+    mapimage = Image.alpha_composite(mapimage, meximage)
+    mapimage.save(output)
 
 
 def main():
@@ -249,6 +270,14 @@ def main():
                         help='Save (LUA) file.')
     parser.add_argument('-o', '--out',     dest='out',  type=str, default='annotated.png',
                         help='Output file.')
+    parser.add_argument('-t','--temperature', dest='temp', type=int, default=5,
+                    help="The amount of annealing cycles")
+    parser.add_argument('-c','--cycles', dest='cycles', type=int, default=10000,
+                    help="The amount of annealing cycles")             
+    parser.add_argument('-w','--web', dest='web', type=bool, default=True,
+                    help="THost webserver for editting")   
+    parser.add_argument('-u','--baseurl', dest='baseurl', type=str, default="http://localhost:8080/",
+                    help="The base url for the webserver")     
     args = parser.parse_args()
 
     # Parse map elements
@@ -283,8 +312,8 @@ def main():
     global mexOwner_np_cache, mexStarter_np_cache
     mexOwner_np_cache = np.array(mexes['owner'])
     mexStarter_np_cache = np.array(mexes['starting'])
-    for T in range(5, 0, -1):
-       armies,mexes = anneal(armies,mexes, T)
+    for T in range(args.temp, 0, -1):
+       armies,mexes = anneal(armies,mexes, T, args.cycles)
 
     mexes['owner']=mexOwner_np_cache
     
@@ -293,18 +322,67 @@ def main():
 
     print(f"Anneal Ellapsed time: {te}")
     # Draw mexes on map
+    createMexImage(mapimage,mexes,armies,args.out)
 
-    meximage = Image.new("RGBA", [imgx, imgy], (0, 0, 0, 0))
-    mapdrawer = ImageDraw.Draw(meximage, "RGBA")
 
-    t = time.time()
-    drawTerritory(mapdrawer, armies, mexes)
-    te = time.time()-t
-    print(f"Draw Ellapsed time: {te}")
+    if args.web:
 
-    mapimage = mapimage.convert("RGBA")
-    mapimage = Image.alpha_composite(mapimage, meximage)
-    mapimage.save(args.out)
+        createMexImage(mapimage,mexes,armies,os.path.join("static",args.out))
+        app = Flask(__name__)
+
+        log = logging.getLogger('werkzeug')
+        log.setLevel(logging.ERROR)
+
+        @app.route('/meximg/<player>', methods=['POST','GET'])
+        @app.route('/meximg', methods=['POST','GET'])
+        def update_mex_image(player=None):
+            global mexes
+            pos = None
+            for k in request.args.to_dict().keys():
+                pos = k
+            if not pos is None:
+                x,y =map(int,pos.split(','))
+                print(f"X:{x} ,Y:{y}")
+                x *= imgx/512
+                y *= imgy/512
+
+                mindist = 256
+                clmex = -1
+                for m,mex in mexes.iterrows():
+                    d = math.sqrt(pow(mex.pos[0]-x,2)+pow(mex.pos[1]-y,2))
+                    if d<mindist: mindist = d;clmex=m
+                print(f"Selected mex {clmex} at {x},{y}")
+                if player:
+                    mexes.loc[clmex,('owner')]=int(player)
+            rnum = time.time_ns()
+            pcolor = None
+            if player:
+                url = f"/meximg/{player}"
+                pcolor = c = '%02x%02x%02x' % army_colors[int(player)]
+            else:
+                player = -1
+                url = "/meximg"
+
+            armylist = []
+            for i,army in armies.iterrows():
+                pass
+                c = '%02x%02x%02x' % army_colors[i]
+                armylist.append({'id':i,'color':c, 'url':f"/meximg/{i}"})
+
+            createMexImage(mapimage,mexes,armies,os.path.join("static",args.out))
+            
+            return render_template('mexshow.html',player=int(player),url=url,rnum=rnum,armies=armylist,pcolor=pcolor)
+
+        @app.route('/changecolor/<player>', methods=['POST'])
+        def update_color(player):
+            c= request.form['armycolor']
+            value = c.lstrip('#')
+            lv = len(value)
+            color =  tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
+            army_colors[int(player)]=color
+            return redirect(f'/meximg/{player}')
+
+        app.run(host="0.0.0.0",port=8080)
 
 
 if __name__ == "__main__":
